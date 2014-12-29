@@ -6,6 +6,7 @@
 <body>
 <div id="graphdiv" style="width:100%"></div>
 <input type="button" value="Unzoom" onclick="unzoomGraph()">
+<div id="zoomdiv" style="width:100%"></div>
 </body>
 <script type="text/javascript">
   g = new Dygraph(
@@ -13,8 +14,24 @@
     // containing div
     document.getElementById("graphdiv"),
     $JS_DATA_ARRAY,
-    $JS_PROP_DICT
+    {
+        labels: ["timestamp", "urls per hour"],
+        connectSeparatedPoints: true,
+        zoomCallback: function(minX, maxX, yRanges) {
+            start = new Date(minX);
+            end = new Date(maxX);
+            zoomdiv.innerHTML = "<b>Range</b> " + start.toString("YYYY-MM-dd") + " to " + end.toString("YYYY-MM-dd")
+            annotations = g.annotations();
+            for (var i in annotations) {
+                anno = annotations[i];
+                if ((anno.x >= start) && (anno.x <= end)) {
+                    dt = new Date(anno.x)
+                    zoomdiv.innerHTML += "<br> " + dt.toString("YYYY-MM-DD") + " " + anno.text;
+                }
+            }
+        },
 
+    }
   );
 
   $JS_ANNOTATIONS
