@@ -7,8 +7,6 @@ def get_query_params(url):
     from urlparse import urlparse, parse_qs
     parsed = urlparse(url)
     # google
-    #str_len = len("google.com")
-    #if parsed.netloc and len(parsed.netloc) >= str_len and parsed.netloc[-str_len:] == "google.com":
     if parsed.netloc and "www.google.com" in parsed.netloc or "encrypted.google.com" in parsed.netloc: # TODO: regex to match line ending
         if "#" in url:
             q_str = url.split("#")[-1] # google uses 'q=' that comes after #; parsed.query strips this part
@@ -30,8 +28,6 @@ def query_firefox_db(path):
 
         hr_dt = dt.replace(minute=0, second=0, microsecond=0) 
         activity[hr_dt] = activity.get(hr_dt, 0) + 1
-        print "FIREFOX", dt.strftime("%Y-%m-%d %H:%M:%S"), entry[0]
-        print "HR_DT FIREFOX", hr_dt.strftime("%Y-%m-%d %H:%M:%S"), entry[0]
 
         params = get_query_params(entry[0])
         if params:
@@ -52,14 +48,11 @@ def query_chrome_db(path):
     activity = {}
     con = sqlite3.connect(path)
     for entry in con.execute(query).fetchall():
-        print "YO", entry
         dt = datetime.datetime(1601,1,1) + datetime.timedelta(microseconds=int(entry[1])) -\
             datetime.timedelta(hours=5) # TODO: fix this properly
 
         hr_dt = dt.replace(minute=0, second=0, microsecond=0) 
         activity[hr_dt] = activity.get(hr_dt, 0) + 1
-        print "CHROME", dt.strftime("%Y-%m-%d %H:%M:%S"), entry[0]
-        print "HR_DT CHROME", hr_dt.strftime("%Y-%m-%d %H:%M:%S"), entry[0]
 
         params = get_query_params(entry[0])
         if params:
@@ -93,6 +86,57 @@ def get_history(browser, db_name, profile_dir, query_func):
                     queries.append((dt, params, browser, profile_id))
     return queries, activity
 
+def get_html(queries, activity):
+    props = '''
+        {
+            labels: ["timestamp", "urls per hour"],
+            connectSeparatedPoints: true
+        }
+        '''
+
+    # hack: add zereos for 'empty' times to make dygraph look correct
+    from dateutil import rrule
+    start = activity[0][0]
+    end = activity[-1][0]
+    q_dict = {dt : ct for dt, ct in activity}
+    z_dict = {dt : 0 for dt in  rrule.rrule(rrule.HOURLY, dtstart=start, until=end)}
+    z_dict.update(q_dict)
+    activity = sorted(z_dict.items())
+
+    # create javascript array of data points
+    rows = []
+    for dt, ct in activity:
+        row = "[%s]" % ", ".join([dt.strftime("new Date(%Y,%m-1,%d,%H)"), str(ct)])
+        rows.append(row)
+    table = "[%s]" % ",\n".join(rows)
+
+    # create javascript array of annotations
+    import json
+    annos = []
+    for dt, params, browser, profile in queries:
+        anno = '{ series: "urls per hour", x: %s, shortText: %s, text: %s }'
+        try:
+            params = json.dumps(str(params))
+        except:
+            print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!" #TODO
+            continue
+        anno = anno % (dt.strftime("new Date(%Y,%m-1,%d,%H,%S).getTime()"), params, params)
+        annos.append(anno)
+    annos = "[%s]" % ",\n".join(annos)
+    annos_js = '''
+    g.ready(function() {
+        g.setAnnotations(%s);
+        });
+    '''
+    annos_js = annos_js % annos
+
+    # substitute into template
+    template = open("res/dygraph_template.html", "rt").read()
+    graph_html = template.replace("$JS_DATA_ARRAY", table) 
+    graph_html = graph_html.replace("$JS_PROP_DICT", props)
+    graph_html = graph_html.replace("$JS_ANNOTATIONS", annos_js)
+    return graph_html
+
 if __name__ == "__main__":
     # TODO: add CLI
     if "darwin" in sys.platform.lower():
@@ -117,5 +161,4 @@ if __name__ == "__main__":
         except:
             print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!" #TODO
 
-    #for dt, ct in sorted(activity):
-    #    print dt.strftime("%Y-%m-%d %H:%M:%S"), ct
+    open("graph.html", "wt").write(get_html(sorted(queries), sorted(activity)))

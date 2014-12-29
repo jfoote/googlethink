@@ -1,0 +1,46 @@
+<html>
+<head>
+<script type="text/javascript"
+  src="res/dygraph-combined-dev.js"></script>
+</head>
+<body>
+<div id="graphdiv" style="width:100%"></div>
+<input type="button" value="Unzoom" onclick="unzoomGraph()">
+</body>
+<script type="text/javascript">
+  g = new Dygraph(
+
+    // containing div
+    document.getElementById("graphdiv"),
+    $JS_DATA_ARRAY,
+    $JS_PROP_DICT
+
+  );
+
+  $JS_ANNOTATIONS
+
+     
+      function unzoomGraph() {
+        g.updateOptions({
+          dateWindow: null,
+          valueRange: null
+        });
+      }
+
+      /*
+      function toggleAnnotation() {
+          if (g.annotations().length != 0) {
+              g.setAnnotations([]);
+          } else {
+              g.setAnnotations([{
+                      series: 'attention_avg',
+                      x: new Date(2014,11-1,28,11,05,13,110).getTime(),
+                      shortText: '27',
+                      text: 'Issue #27'
+              }]);
+          }
+      }
+      */
+
+</script>
+</html>
