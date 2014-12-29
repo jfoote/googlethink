@@ -45,20 +45,23 @@ def query_chrome_db(path):
         visits.transition, visit_source.source
         FROM urls JOIN visits ON urls.id = visits.url LEFT JOIN visit_source ON visits.id = visit_source.id
         ''' 
-
+    query = '''
+        SELECT urls.url, visits.visit_time FROM urls JOIN visits ON urls.id = visits.url
+        ''' 
     searches = []
     activity = {}
     con = sqlite3.connect(path)
     for entry in con.execute(query).fetchall():
-        dt = datetime.datetime(1601,1,1) + datetime.timedelta(microseconds=int(entry[5])) -\
+        print "YO", entry
+        dt = datetime.datetime(1601,1,1) + datetime.timedelta(microseconds=int(entry[1])) -\
             datetime.timedelta(hours=5) # TODO: fix this properly
 
         hr_dt = dt.replace(minute=0, second=0, microsecond=0) 
         activity[hr_dt] = activity.get(hr_dt, 0) + 1
-        print "CHROME", dt.strftime("%Y-%m-%d %H:%M:%S"), entry[1]
-        print "HR_DT CHROME", hr_dt.strftime("%Y-%m-%d %H:%M:%S"), entry[1]
+        print "CHROME", dt.strftime("%Y-%m-%d %H:%M:%S"), entry[0]
+        print "HR_DT CHROME", hr_dt.strftime("%Y-%m-%d %H:%M:%S"), entry[0]
 
-        params = get_query_params(entry[1])
+        params = get_query_params(entry[0])
         if params:
             searches.append((dt, params))
     return searches, activity
@@ -114,5 +117,5 @@ if __name__ == "__main__":
         except:
             print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!" #TODO
 
-    for dt, ct in sorted(activity):
-        print dt.strftime("%Y-%m-%d %H:%M:%S"), ct
+    #for dt, ct in sorted(activity):
+    #    print dt.strftime("%Y-%m-%d %H:%M:%S"), ct
