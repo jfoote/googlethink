@@ -2,7 +2,6 @@
 
 import os, sys, sqlite3, datetime
 from tempfile import NamedTemporaryFile
-from copy import deepcopy
 
 def get_query_params(url):
     from urlparse import urlparse, parse_qs
@@ -28,9 +27,11 @@ def query_firefox_db(path):
     con = sqlite3.connect(path)
     for entry in con.execute(query).fetchall():
         dt = datetime.datetime(1970,1,1) + datetime.timedelta(microseconds=int(entry[2]))
-        hr_dt = deepcopy(dt)
-        hr_dt.replace(hour=0, minute=0, second=0, microsecond=0) 
+
+        hr_dt = dt.replace(minute=0, second=0, microsecond=0) 
         activity[hr_dt] = activity.get(hr_dt, 0) + 1
+        print "FIREFOX", dt.strftime("%Y-%m-%d %H:%M:%S"), entry[0]
+        print "HR_DT FIREFOX", hr_dt.strftime("%Y-%m-%d %H:%M:%S"), entry[0]
 
         params = get_query_params(entry[0])
         if params:
@@ -44,6 +45,7 @@ def query_chrome_db(path):
         visits.transition, visit_source.source
         FROM urls JOIN visits ON urls.id = visits.url LEFT JOIN visit_source ON visits.id = visit_source.id
         ''' 
+
     searches = []
     activity = {}
     con = sqlite3.connect(path)
@@ -51,9 +53,10 @@ def query_chrome_db(path):
         dt = datetime.datetime(1601,1,1) + datetime.timedelta(microseconds=int(entry[5])) -\
             datetime.timedelta(hours=5) # TODO: fix this properly
 
-        hr_dt = deepcopy(dt)
-        hr_dt.replace(hour=0, minute=0, second=0, microsecond=0) 
+        hr_dt = dt.replace(minute=0, second=0, microsecond=0) 
         activity[hr_dt] = activity.get(hr_dt, 0) + 1
+        print "CHROME", dt.strftime("%Y-%m-%d %H:%M:%S"), entry[1]
+        print "HR_DT CHROME", hr_dt.strftime("%Y-%m-%d %H:%M:%S"), entry[1]
 
         params = get_query_params(entry[1])
         if params:
@@ -85,35 +88,7 @@ def get_history(browser, db_name, profile_dir, query_func):
                     activity[hr] = activity.get(hr, 0) + ct
                 for dt, params in queries_i:
                     queries.append((dt, params, browser, profile_id))
-    return queries
-
-
-def get_chrome_history(profile_dir):
-    queries = []
-    activity = {}
-    for dirpath, dirnames, filenames in os.walk(profile_dir):
-        if "History" not in filenames:
-            continue
-
-        path = os.path.join(dirpath, "History")
-        profile_id = os.path.basename(dirpath)
- 
-        # poor man's read-only mode since python2 doesn't support it
-        try:
-            queries_i, act_i = query_chrome_db(path)
-            for hr, ct in act_i.iteritems(): # merge activity into histogram
-                activity[hr] = activity.get(hr, 0) + ct
-            for dt, params in queries_i: # append queries
-                queries.append((dt, params, "Chrome", profile_id))
-        except sqlite3.OperationalError:
-            with NamedTemporaryFile() as fp:
-                fp.write(open(path, "rb").read())
-                queries_i, act_i = query_chrome_db(fp.name)
-                for hr, ct in act_i.iteritems(): # merge activity into histogram
-                    activity[hr] = activity.get(hr, 0) + ct
-                for dt, params in queries_i:
-                    queries.append((dt, params, "Chrome", profile_id))
-    return queries
+    return queries, activity
 
 if __name__ == "__main__":
     # TODO: add CLI
@@ -125,11 +100,19 @@ if __name__ == "__main__":
         ff_profile_dir = os.path.expanduser("~")
         chrome_profile_dir = os.path.expanduser("~")
 
-    #queries = get_chrome_history(chrome_profile_dir) + get_firefox_history(ff_profile_dir)
-    queries = get_history("Chrome", "History", chrome_profile_dir, query_chrome_db) + \
-            get_history("Firefox", "places.sqlite", ff_profile_dir, query_firefox_db)
+    c_qs, c_act = get_history("Chrome", "History", chrome_profile_dir, query_chrome_db) 
+    ff_qs, ff_act = get_history("Firefox", "places.sqlite", ff_profile_dir, query_firefox_db)
+
+    queries = ff_qs + c_qs
+    activity = []
+    for hr in c_act.keys() + ff_act.keys():
+        activity.append((hr, c_act.get(hr, 0) + ff_act.get(hr, 0)))
+
     for dt, params, browser, profile in sorted(queries):
         try:
             print dt.strftime("%Y-%m-%d %H:%M:%S"), params.encode()
         except:
             print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!" #TODO
+
+    for dt, ct in sorted(activity):
+        print dt.strftime("%Y-%m-%d %H:%M:%S"), ct
