@@ -87,17 +87,13 @@ def get_history(browser, db_name, profile_dir, query_func):
     return queries, activity
 
 def get_html(queries, activity):
-    props = '''
-        {
-            labels: ["timestamp", "urls per hour"],
-            connectSeparatedPoints: true
-        }
-        '''
 
     # TODO: 
+    # 0. fix bug: annotations that aren't on hours (data points) aren't displayed
     # 1. zoom on past 7 days
-    # 2. (in javascript) print queries for zoomed interval below chart
-    # dateWindow: [new Date(2014,12-1,29).getTime(),new Date(2014,12-1,30).getTime()]
+    #   ex: dateWindow: [new Date(2014,12-1,29).getTime(),new Date(2014,12-1,30).getTime()]
+    # 2. (in javascript) print queries for zoomed interval below chart [DONE-ish]
+    #   see: http://dygraphs.com/tests/callback.html
 
     # hack: add zereos for 'empty' times to make dygraph look correct
     from dateutil import rrule
@@ -138,7 +134,6 @@ def get_html(queries, activity):
     # substitute into template
     template = open("res/dygraph_template.html", "rt").read()
     graph_html = template.replace("$JS_DATA_ARRAY", table) 
-    graph_html = graph_html.replace("$JS_PROP_DICT", props)
     graph_html = graph_html.replace("$JS_ANNOTATIONS", annos_js)
     return graph_html
 
