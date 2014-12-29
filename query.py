@@ -94,6 +94,11 @@ def get_html(queries, activity):
         }
         '''
 
+    # TODO: 
+    # 1. zoom on past 7 days
+    # 2. (in javascript) print queries for zoomed interval below chart
+    # dateWindow: [new Date(2014,12-1,29).getTime(),new Date(2014,12-1,30).getTime()]
+
     # hack: add zereos for 'empty' times to make dygraph look correct
     from dateutil import rrule
     start = activity[0][0]
