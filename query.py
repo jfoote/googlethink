@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, sqlite3, datetime
+import os, sys, sqlite3, datetime, json
 from tempfile import NamedTemporaryFile
 
 def get_query_params(url):
@@ -19,45 +19,22 @@ def get_query_params(url):
     return None
 
 def query_firefox_db(path):
-    searches = []
-    activity = {}
     query = 'SELECT url, visit_count, last_visit_date FROM moz_places where visit_count > 0 order by last_visit_date asc;'
     con = sqlite3.connect(path)
     for entry in con.execute(query).fetchall():
         dt = datetime.datetime(1970,1,1) + datetime.timedelta(microseconds=int(entry[2]))
-
-        hr_dt = dt.replace(minute=0, second=0, microsecond=0) 
-        activity[hr_dt] = activity.get(hr_dt, 0) + 1
-
-        params = get_query_params(entry[0])
-        if params:
-            searches.append((dt, params))
-    return searches, activity
+        yield dt, entry[0]
 
 def query_chrome_db(path):
     query = '''
-        SELECT urls.id, urls.url, urls.title, urls.visit_count, urls.typed_count, urls.last_visit_time,
-        urls.hidden, urls.favicon_id, visits.visit_time, visits.from_visit, visits.visit_duration,
-        visits.transition, visit_source.source
-        FROM urls JOIN visits ON urls.id = visits.url LEFT JOIN visit_source ON visits.id = visit_source.id
-        ''' 
-    query = '''
         SELECT urls.url, visits.visit_time FROM urls JOIN visits ON urls.id = visits.url
         ''' 
-    searches = []
-    activity = {}
     con = sqlite3.connect(path)
     for entry in con.execute(query).fetchall():
         dt = datetime.datetime(1601,1,1) + datetime.timedelta(microseconds=int(entry[1])) -\
             datetime.timedelta(hours=5) # TODO: fix this properly
 
-        hr_dt = dt.replace(minute=0, second=0, microsecond=0) 
-        activity[hr_dt] = activity.get(hr_dt, 0) + 1
-
-        params = get_query_params(entry[0])
-        if params:
-            searches.append((dt, params))
-    return searches, activity
+        yield dt, entry[0]
 
 def get_history(browser, db_name, profile_dir, query_func):
     queries = []
@@ -71,22 +48,15 @@ def get_history(browser, db_name, profile_dir, query_func):
  
         # poor man's read-only mode since python2 doesn't support it
         try:
-            queries_i, act_i = query_func(path)
-            for hr, ct in act_i.iteritems(): # merge activity into histogram
-                activity[hr] = activity.get(hr, 0) + ct
-            for dt, params in queries_i: # append queries
-                queries.append((dt, params, browser, profile_id))
+            for dt, entry in query_func(path):
+                yield dt, entry , browser, profile_id
         except sqlite3.OperationalError:
             with NamedTemporaryFile() as fp:
                 fp.write(open(path, "rb").read())
-                queries_i, act_i = query_func(fp.name)
-                for hr, ct in act_i.iteritems(): # merge activity into histogram
-                    activity[hr] = activity.get(hr, 0) + ct
-                for dt, params in queries_i:
-                    queries.append((dt, params, browser, profile_id))
-    return queries, activity
+                for dt, entry in query_func(fp.name):
+                    yield dt, entry , browser, profile_id
 
-def get_html(queries, activity):
+def get_html(queries, history):
 
     # TODO: 
     # 0. fix bug: annotations that aren't on hours (data points) aren't displayed
@@ -95,6 +65,7 @@ def get_html(queries, activity):
     # 2. (in javascript) print queries for zoomed interval below chart [DONE-ish]
     #   see: http://dygraphs.com/tests/callback.html
 
+    '''
     # hack: add zereos for 'empty' times to make dygraph look correct
     from dateutil import rrule
     start = activity[0][0]
@@ -103,25 +74,36 @@ def get_html(queries, activity):
     z_dict = {dt : 0 for dt in  rrule.rrule(rrule.HOURLY, dtstart=start, until=end)}
     z_dict.update(q_dict)
     activity = sorted(z_dict.items())
+    '''
 
-    # create javascript array of data points
-    rows = []
-    for dt, ct in activity:
-        row = "[%s]" % ", ".join([dt.strftime("new Date(%Y,%m-1,%d,%H)"), str(ct)])
-        rows.append(row)
-    table = "[%s]" % ",\n".join(rows)
+    # create javascript arrays of dygraph data points and raw data, respectively
+    data_rows = []
+    raw_rows = []
+    last = None
+    for dt, entry, browser, profile_id, ct, params in history:
+        if last and last > dt:
+            print last, dt
+            import pdb; pdb.set_trace()
+        last = dt
+        row = "[%s]" % ", ".join([dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S)"), str(ct)])
+        data_rows.append(row)
+        jsons = [json.dumps(i) for i in [entry, browser, profile_id, ct, params]]
+        row = "[%s]" % ", ".join([dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S)")] + jsons)
+        raw_rows.append(row)
+    data = "[%s]" % ",\n".join(data_rows)
+    raw = "[%s]" % ",\n".join(raw_rows)
 
     # create javascript array of annotations
-    import json
     annos = []
-    for dt, params, browser, profile in queries:
+    for dt, params in queries:
         anno = '{ series: "urls per hour", x: %s, shortText: %s, text: %s }'
         try:
             params = json.dumps(str(params))
         except:
             print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!" #TODO
             continue
-        anno = anno % (dt.strftime("new Date(%Y,%m-1,%d,%H,%S).getTime()"), params, params)
+        #anno = anno % (dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S).getTime()"), params, params)
+        anno = anno % (dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S).getTime()"), '"G"', params)
         annos.append(anno)
     annos = "[%s]" % ",\n".join(annos)
     annos_js = '''
@@ -133,8 +115,9 @@ def get_html(queries, activity):
 
     # substitute into template
     template = open("res/dygraph_template.html", "rt").read()
-    graph_html = template.replace("$JS_DATA_ARRAY", table) 
+    graph_html = template.replace("$JS_DATA_ARRAY", data) 
     graph_html = graph_html.replace("$JS_ANNOTATIONS", annos_js)
+    graph_html = graph_html.replace("$JS_RAW_DATA", raw)
     return graph_html
 
 if __name__ == "__main__":
@@ -147,18 +130,29 @@ if __name__ == "__main__":
         ff_profile_dir = os.path.expanduser("~")
         chrome_profile_dir = os.path.expanduser("~")
 
-    c_qs, c_act = get_history("Chrome", "History", chrome_profile_dir, query_chrome_db) 
-    ff_qs, ff_act = get_history("Firefox", "places.sqlite", ff_profile_dir, query_firefox_db)
+    # yield dt, entry , browser, profile_id
+    history = [h for h in get_history("Chrome", "History", chrome_profile_dir, query_chrome_db)] +\
+            [h for h in get_history("Firefox", "places.sqlite", ff_profile_dir, query_firefox_db)]
+    history.sort(key=lambda h: h[0])
 
-    queries = ff_qs + c_qs
-    activity = []
-    for hr in c_act.keys() + ff_act.keys():
-        activity.append((hr, c_act.get(hr, 0) + ff_act.get(hr, 0)))
+    counts = {}
+    for dt, entry, browser, profile_id in history:
+        hr = dt.replace(minute=0, second=0, microsecond=0)
+        counts[hr] = counts.get(hr, 0) + 1
 
-    for dt, params, browser, profile in sorted(queries):
-        try:
-            print dt.strftime("%Y-%m-%d %H:%M:%S"), params.encode()
-        except:
-            print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!" #TODO
+    hhistory = []
+    last_query = None
+    queries = []
+    for dt, entry, browser, profile_id in history:
+        params = get_query_params(entry)
+        if params:
+            last_query = params
+            queries.append((dt, params))
+            try:
+                print dt.strftime("%Y-%m-%d %H:%M:%S"), params.encode()
+            except:
+                print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!"
+        hr = dt.replace(minute=0, second=0, microsecond=0)
+        hhistory.append((dt, entry, browser, profile_id, counts[hr], last_query))
 
-    open("graph.html", "wt").write(get_html(sorted(queries), sorted(activity)))
+    open("graph.html", "wt").write(get_html(queries, hhistory))
