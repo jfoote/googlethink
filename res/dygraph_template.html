@@ -7,8 +7,11 @@
 <div id="graphdiv" style="width:100%"></div>
 <input type="button" value="Unzoom" onclick="unzoomGraph()">
 <div id="highlightdiv" style="width:100%"></div>
+<div id="drawdiv" style="width:100%"></div>
 </body>
 <script type="text/javascript">
+  var lastXMin = -1;
+  var lastXMax = -1;
   g = new Dygraph(
 
     // containing div
@@ -19,7 +22,18 @@
         connectSeparatedPoints: true,
         highlightCallback: function(event, x, points, row, seriesName) {
             highlightdiv.innerHTML = raw[row];
+        },
+        drawCallback: function(g) {
+           var xMin = g.xAxisRange()[0];
+           var xMax = g.xAxisRange()[1];
+           if ( (xMin == lastXMin) && (xMax == lastXMax) ) {
+               console.log("no change");
+               return;
+           }
+           drawdivs.innerHTML = "<b>History</b> from " + xMin + " to " + xMax + "<br/>";
+           // TODO: implement the rest
         }
+
     }
   );
 
