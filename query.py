@@ -56,68 +56,51 @@ def get_history(browser, db_name, profile_dir, query_func):
                 for dt, entry in query_func(fp.name):
                     yield dt, entry , browser, profile_id
 
-def get_html(queries, history):
+#def get_html(queries, history):
+def get_html(queries, raw, by_day):
 
     # TODO: 
-    # 0. fix bug: annotations that aren't on hours (data points) aren't displayed
-    # 1. zoom on past 7 days
+    # 1. Convert xAxisRange(..) args to days and iterate over days
+    #     - Note that by_day is indexed by a *string* for compatibility and the month *is not* zero-based like JS days
+    #     - Approach: figure out how to iterate over days in JS -- be careful to start iteration from *day* of xMin ; then, pick a common string format (it might be easier to change strftime in Python)
+    # 2. Fix bug in (firefox?) date parsing -- thinks things occurred in the future
+    # 3. zoom on past 7 days
     #   ex: dateWindow: [new Date(2014,12-1,29).getTime(),new Date(2014,12-1,30).getTime()]
-    # 2. (in javascript) print queries for zoomed interval below chart [DONE-ish]
-    #   see: http://dygraphs.com/tests/callback.html
-
-    '''
-    # hack: add zereos for 'empty' times to make dygraph look correct
-    from dateutil import rrule
-    start = activity[0][0]
-    end = activity[-1][0]
-    q_dict = {dt : ct for dt, ct in activity}
-    z_dict = {dt : 0 for dt in  rrule.rrule(rrule.HOURLY, dtstart=start, until=end)}
-    z_dict.update(q_dict)
-    activity = sorted(z_dict.items())
-    '''
-
+    
     # create javascript arrays of dygraph data points and raw data, respectively
-    data_rows = []
-    raw_rows = []
-    last = None
-    for dt, entry, browser, profile_id, ct, params in history:
-        if last and last > dt:
-            print last, dt
-            import pdb; pdb.set_trace()
-        last = dt
-        row = "[%s]" % ", ".join([dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S)"), str(ct)])
-        data_rows.append(row)
-        jsons = [json.dumps(i) for i in [entry, browser, profile_id, ct, params]]
-        row = "[%s]" % ", ".join([dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S)")] + jsons)
-        raw_rows.append(row)
-    data = "[%s]" % ",\n".join(data_rows)
-    raw = "[%s]" % ",\n".join(raw_rows)
+    data_rows_js = []
+    raw_rows_js = []
+    for dt, ct, url, browser, profile_id, last_params in raw:
+    #raw.append((last_search_dt, ct, url, browser, profile_id, params))
+        row_js = "[%s]" % ", ".join([dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S)"), str(ct)])
+        data_rows_js.append(row_js)
+        jsons = [json.dumps(i) for i in [ct, url, browser, profile_id, last_params]]
+        row_js = "[%s]" % ", ".join([dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S)")] + jsons)
+        raw_rows_js.append(row_js)
+    data_js = "[%s]" % ",\n".join(data_rows_js)
+    raw_js = "[%s]" % ",\n".join(raw_rows_js)
 
-    # create javascript array of annotations
-    annos = []
-    for dt, params in queries:
-        anno = '{ series: "urls per hour", x: %s, shortText: %s, text: %s }'
-        try:
-            params = json.dumps(str(params))
-        except:
-            print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!" #TODO
-            continue
-        #anno = anno % (dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S).getTime()"), params, params)
-        anno = anno % (dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S).getTime()"), '"G"', params)
-        annos.append(anno)
-    annos = "[%s]" % ",\n".join(annos)
-    annos_js = '''
-    g.ready(function() {
-        g.setAnnotations(%s);
-        });
-    '''
-    annos_js = annos_js % annos
+    # create javascript dictionary for highlight data
+    # dates will be strings, not dates (TODO see WARNING)
+    by_str_day = {}
+    # by_day[day] = by_day.get(day, []) + [[dt, entry, browser, profile_id]]
+    for day_dt, entries in by_day.iteritems():
+        str_day = day_dt.strftime("%Y-%m-%d)") # WARNING: off-by-one from JS month!!
+        str_entries = []
+        for entry in entries:
+            dt = entry[0]
+            str_dt = dt.strftime("%Y-%m-%d %H:%M:%S") # WARNING: see above -- just use some common string format
+            str_entry = [str_dt] + entry[1:] 
+            str_entries.append(str_entry)
+
+        by_str_day[str_day] = str_entries
+    by_day_js = json.dumps(by_str_day, indent=4)
 
     # substitute into template
     template = open("res/dygraph_template.html", "rt").read()
-    graph_html = template.replace("$JS_DATA_ARRAY", data) 
-    graph_html = graph_html.replace("$JS_ANNOTATIONS", annos_js)
-    graph_html = graph_html.replace("$JS_RAW_DATA", raw)
+    graph_html = template.replace("$JS_DATA_ARRAY", data_js) 
+    graph_html = graph_html.replace("$JS_BY_DAY", by_day_js)
+    graph_html = graph_html.replace("$JS_RAW_DATA", raw_js)
     return graph_html
 
 if __name__ == "__main__":
@@ -133,26 +116,37 @@ if __name__ == "__main__":
     # yield dt, entry , browser, profile_id
     history = [h for h in get_history("Chrome", "History", chrome_profile_dir, query_chrome_db)] +\
             [h for h in get_history("Firefox", "places.sqlite", ff_profile_dir, query_firefox_db)]
-    history.sort(key=lambda h: h[0])
+    history.sort()
 
-    counts = {}
-    for dt, entry, browser, profile_id in history:
-        hr = dt.replace(minute=0, second=0, microsecond=0)
-        counts[hr] = counts.get(hr, 0) + 1
-
-    hhistory = []
-    last_query = None
-    queries = []
-    for dt, entry, browser, profile_id in history:
-        params = get_query_params(entry)
+    queries = [] 
+    raw = []
+    by_day = {}
+    last_search_dt = None
+    ct = 0
+    for dt, url, browser, profile_id in history:
+        #hr = dt.replace(minute=0, second=0, microsecond=0)
+        # if this is a search query, record it to data & raw tables
+        params = get_query_params(url)
         if params:
-            last_query = params
-            queries.append((dt, params))
+            if last_search_dt:
+                queries.append((last_search_dt, ct))
+                raw.append((last_search_dt, ct, url, browser, profile_id, params))
+            last_search_dt = dt
+            ct = 0
+
+            # print search query info to stdout
             try:
                 print dt.strftime("%Y-%m-%d %H:%M:%S"), params.encode()
             except:
                 print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!"
-        hr = dt.replace(minute=0, second=0, microsecond=0)
-        hhistory.append((dt, entry, browser, profile_id, counts[hr], last_query))
+        ct += 1
 
-    open("graph.html", "wt").write(get_html(queries, hhistory))
+        # store history into to by_day dict
+        day = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        by_day[day] = by_day.get(day, []) + [[dt, url, browser, profile_id]]
+
+    # store count for final search query
+    queries.append((last_search_dt, ct))
+    raw.append((last_search_dt, ct, url, browser, profile_id, params))
+
+    open("graph.html", "wt").write(get_html(queries, raw, by_day))
