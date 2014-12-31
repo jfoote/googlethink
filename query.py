@@ -23,7 +23,8 @@ def query_firefox_db(path):
     query = 'SELECT url, visit_count, last_visit_date FROM moz_places where visit_count > 0 order by last_visit_date asc;'
     con = sqlite3.connect(path)
     for entry in con.execute(query).fetchall():
-        dt = datetime.datetime(1970,1,1) + datetime.timedelta(microseconds=int(entry[2]))
+        dt = datetime.datetime(1970,1,1) + datetime.timedelta(microseconds=int(entry[2])) -\
+                timedelta(hours=5) # TODO: fix this properly
         yield dt, entry[0]
 
 def query_chrome_db(path):
@@ -60,9 +61,6 @@ def get_history(browser, db_name, profile_dir, query_func):
 #def get_html(queries, history):
 def get_html(queries, raw, by_day):
 
-    # TODO: fix multiple date parsing bugs:
-    #   - firefox dates are (a few) days off
-    
     # create javascript arrays of dygraph data points and raw data, respectively
     data_rows_js = []
     raw_rows_js = []
@@ -76,7 +74,7 @@ def get_html(queries, raw, by_day):
     raw_js = "[%s]" % ",\n".join(raw_rows_js)
 
     # create javascript dictionary for highlight data
-    # dates will be strings, not dates (TODO see WARNING)
+    # dates will be strings, not dates 
     by_str_day = {}
     for day_dt, entries in by_day.iteritems():
         str_day = day_dt.strftime("%Y-%m-%d") 
@@ -131,23 +129,21 @@ if __name__ == "__main__":
     queries = [] 
     raw = []
     by_day = {}
-    last_search_dt = None
-    last_params = None
+    last_info = None
     ct = 0
     for dt, url, browser, profile_id in history:
         # if this is a search query, record it to data & raw tables
         params = get_query_params(url)
         if params:
-            if last_search_dt:
-                queries.append((last_search_dt, ct))
-                raw.append((last_search_dt, ct, url, browser, profile_id, last_params))
+            if last_info:
+                queries.append((last_info[0], ct))
+                raw.append((last_info[0], ct, last_info[1], last_info[2], last_info[3], last_info[4]))
 
                 # store query into to by_day dict
                 day = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-                by_day[day] = by_day.get(day, []) + [[dt, last_params, browser, profile_id]]
+                by_day[day] = by_day.get(day, []) + [[dt, last_info[4], last_info[2], last_info[3]]]
 
-            last_search_dt = dt
-            last_params = params
+            last_info = dt, url, browser, profile_id, params
             ct = 0
 
             # print search query info to stdout
@@ -158,8 +154,12 @@ if __name__ == "__main__":
         ct += 1
 
         
-    # store count for final search query
-    queries.append((last_search_dt, ct))
-    raw.append((last_search_dt, ct, url, browser, profile_id, params))
+    # store info for final search query
+    queries.append((last_info[0], ct))
+    raw.append((last_info[0], ct, last_info[1], last_info[2], last_info[3], last_info[4]))
+    day = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    by_day[day] = by_day.get(day, []) + [[dt, last_info[4], last_info[2], last_info[3]]]
+    
+
 
     open("graph.html", "wt").write(get_html(queries, raw, by_day))
