@@ -23,8 +23,9 @@
     {
         labels: ["timestamp", "urls per hour"],
         connectSeparatedPoints: true,
+        dateWindow: [$JS_ZOOM_MIN, $JS_ZOOM_MAX],
         highlightCallback: function(event, x, points, row, seriesName) {
-            highlightdiv.innerHTML = raw[row];
+            highlightdiv.innerHTML = raw[row][5];
         },
         drawCallback: function(dg, is_initial) {
            console.log("drawCallback called");
@@ -47,18 +48,19 @@
            for (var d = new Date(xMinDay.getTime()); d <= xMaxDay; d.setDate(d.getDate() + 1)) {
                var key = d.getFullYear() + "-" + ('0' + (d.getMonth()+1)).slice(-2) + "-" + ('0' + d.getDate()).slice(-2);
                var entries = by_day[key];
-               for (i = 0; i < entries.length; i++) {
-                   drawdiv.innerHTML += entries[i] + "<br/>";
+               if (typeof entries != 'undefined') {
+                   drawdiv.innerHTML += "<b>Date:" + key + "</b><br/>";
+                   ct++;
+                   for (i = 0; i < entries.length; i++) {
+                       drawdiv.innerHTML += entries[i][0] + " [" + entries[i][2] + ":" + entries[i][3] + "] " + entries[i][1] + " <br/>";
+                   }
                }
-
-               ct += 1;
-               if (ct > 5) { // Max 5 days for now to avoid overLOAD!!
+               if (ct > 60) { // Too many entries makes the browser choke
+                   drawdiv.innerHTML += "... (truncated) ... <br/>"
                    break;
                }
            }
-
         }
-
     }
   );
 

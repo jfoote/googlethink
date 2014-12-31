@@ -2,6 +2,7 @@
 
 import os, sys, sqlite3, datetime, json
 from tempfile import NamedTemporaryFile
+from datetime import timedelta
 
 def get_query_params(url):
     from urlparse import urlparse, parse_qs
@@ -96,11 +97,18 @@ def get_html(queries, raw, by_day):
         by_str_day[str_day] = str_entries
     by_day_js = json.dumps(by_str_day, indent=4)
 
+    zoom_end = sorted(by_day.keys())[-1]
+    zoom_end_js = zoom_end.strftime("new Date(%Y,%m-1,%d)")
+    zoom_start = zoom_end - timedelta(days=7)
+    zoom_start_js = zoom_start.strftime("new Date(%Y,%m-1,%d)")
+
     # substitute into template
     template = open("res/dygraph_template.html", "rt").read()
     graph_html = template.replace("$JS_DATA_ARRAY", data_js) 
     graph_html = graph_html.replace("$JS_BY_DAY", by_day_js)
     graph_html = graph_html.replace("$JS_RAW_DATA", raw_js)
+    graph_html = graph_html.replace("$JS_ZOOM_MIN", zoom_start_js)
+    graph_html = graph_html.replace("$JS_ZOOM_MAX", zoom_end_js)
     return graph_html
 
 if __name__ == "__main__":
@@ -131,6 +139,11 @@ if __name__ == "__main__":
             if last_search_dt:
                 queries.append((last_search_dt, ct))
                 raw.append((last_search_dt, ct, url, browser, profile_id, params))
+
+                # store query into to by_day dict
+                day = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                by_day[day] = by_day.get(day, []) + [[dt, params, browser, profile_id]]
+
             last_search_dt = dt
             ct = 0
 
@@ -141,10 +154,7 @@ if __name__ == "__main__":
                 print dt.strftime("%Y-%m-%d %H:%M:%S"), "ERROR!"
         ct += 1
 
-        # store history into to by_day dict
-        day = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        by_day[day] = by_day.get(day, []) + [[dt, url, browser, profile_id]]
-
+        
     # store count for final search query
     queries.append((last_search_dt, ct))
     raw.append((last_search_dt, ct, url, browser, profile_id, params))
