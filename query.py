@@ -60,13 +60,9 @@ def get_history(browser, db_name, profile_dir, query_func):
 #def get_html(queries, history):
 def get_html(queries, raw, by_day):
 
-    # TODO: 
-    # 1. Convert xAxisRange(..) args to days and iterate over days
-    #     - Note that by_day is indexed by a *string* for compatibility and the month *is not* zero-based like JS days
-    #     - Approach: figure out how to iterate over days in JS -- be careful to start iteration from *day* of xMin ; then, pick a common string format (it might be easier to change strftime in Python)
-    # 2. Fix bug in (firefox?) date parsing -- thinks things occurred in the future
-    # 3. zoom on past 7 days
-    #   ex: dateWindow: [new Date(2014,12-1,29).getTime(),new Date(2014,12-1,30).getTime()]
+    # TODO: fix multiple date parsing bugs:
+    #   - firefox dates are (a few) days off
+    #   - not all dates in the log match the graph
     
     # create javascript arrays of dygraph data points and raw data, respectively
     data_rows_js = []
