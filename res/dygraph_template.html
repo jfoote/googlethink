@@ -10,6 +10,9 @@
 <div id="drawdiv" style="width:100%"></div>
 </body>
 <script type="text/javascript">
+  var raw = $JS_RAW_DATA;
+  var by_day = $JS_BY_DAY;
+
   var lastXMin = -1;
   var lastXMax = -1;
   g = new Dygraph(
@@ -23,23 +26,43 @@
         highlightCallback: function(event, x, points, row, seriesName) {
             highlightdiv.innerHTML = raw[row];
         },
-        drawCallback: function(g) {
-           var xMin = g.xAxisRange()[0];
-           var xMax = g.xAxisRange()[1];
+        drawCallback: function(dg, is_initial) {
+           console.log("drawCallback called");
+           var xMin = dg.xAxisRange()[0];
+           var xMax = dg.xAxisRange()[1];
            if ( (xMin == lastXMin) && (xMax == lastXMax) ) {
                console.log("no change");
                return;
            }
-           drawdivs.innerHTML = "<b>History</b> from " + xMin + " to " + xMax + "<br/>";
-           // TODO: implement the rest
+           // Get day of xMin, xMax
+           xMinDay = new Date(xMin);
+           xMinDay = new Date(xMinDay.getFullYear(), xMinDay.getMonth(), xMinDay.getDate());
+           xMaxDay = new Date(xMax);
+           xMaxDay = new Date(xMaxDay.getFullYear(), xMaxDay.getMonth(), xMaxDay.getDate());
+
+           drawdiv.innerHTML = "<b>History</b> from " + xMinDay + " to " + xMaxDay + "<br/>";
+
+           // Iterate by day from xMin, xMax, printing by_day[i] 
+           var ct = 0;
+           for (var d = new Date(xMinDay.getTime()); d <= xMaxDay; d.setDate(d.getDate() + 1)) {
+               var key = d.getFullYear() + "-" + ('0' + (d.getMonth()+1)).slice(-2) + "-" + ('0' + d.getDate()).slice(-2);
+               var entries = by_day[key];
+               for (i = 0; i < entries.length; i++) {
+                   drawdiv.innerHTML += entries[i] + "<br/>";
+               }
+
+               ct += 1;
+               if (ct > 5) { // Max 5 days for now to avoid overLOAD!!
+                   break;
+               }
+           }
+
         }
 
     }
   );
 
-  raw = $JS_RAW_DATA;
 
-  by_day = $JS_BY_DAY;
 
       function unzoomGraph() {
         g.updateOptions({

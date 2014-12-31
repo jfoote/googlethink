@@ -85,7 +85,7 @@ def get_html(queries, raw, by_day):
     by_str_day = {}
     # by_day[day] = by_day.get(day, []) + [[dt, entry, browser, profile_id]]
     for day_dt, entries in by_day.iteritems():
-        str_day = day_dt.strftime("%Y-%m-%d)") # WARNING: off-by-one from JS month!!
+        str_day = day_dt.strftime("%Y-%m-%d") # WARNING: off-by-one from JS month!!
         str_entries = []
         for entry in entries:
             dt = entry[0]
