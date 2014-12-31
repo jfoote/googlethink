@@ -6,6 +6,10 @@
 <body>
 <div id="graphdiv" style="width:100%"></div>
 <input type="button" value="Unzoom" onclick="unzoomGraph()">
+<input type="button" value="Day" onclick="zoomDay()">
+<input type="button" value="Two Days" onclick="zoomTwoDays()">
+<input type="button" value="Week" onclick="zoomWeek()">
+<input type="button" value="Month" onclick="zoomMonth()">
 <div id="highlightdiv" style="width:100%"></div>
 <div id="drawdiv" style="width:100%"></div>
 </body>
@@ -23,7 +27,6 @@
     {
         labels: ["timestamp", "urls per hour"],
         connectSeparatedPoints: true,
-        dateWindow: [$JS_ZOOM_MIN, $JS_ZOOM_MAX],
         highlightCallback: function(event, x, points, row, seriesName) {
             highlightdiv.innerHTML = raw[row][5];
         },
@@ -63,6 +66,8 @@
         }
     }
   );
+  
+  g.ready(zoomTwoDays);
 
 
 
@@ -72,6 +77,26 @@
           valueRange: null
         });
       }
-
+      function zoomDay() {
+        g.updateOptions({
+          dateWindow: [$JS_ZOOM_DAY_MIN, $JS_ZOOM_MAX]
+        });
+      }
+      function zoomWeek() {
+        g.updateOptions({
+          dateWindow: [$JS_ZOOM_WEEK_MIN, $JS_ZOOM_MAX]
+        });
+      }
+      function zoomTwoDays() {
+        g.updateOptions({
+          dateWindow: [$JS_ZOOM_TWO_DAYS_MIN, $JS_ZOOM_MAX]
+        });
+      }
+      function zoomMonth() {
+        g.updateOptions({
+          dateWindow: [$JS_ZOOM_MONTH_MIN, $JS_ZOOM_MAX]
+        });
+      }
+            
 </script>
 </html>

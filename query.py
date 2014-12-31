@@ -62,13 +62,11 @@ def get_html(queries, raw, by_day):
 
     # TODO: fix multiple date parsing bugs:
     #   - firefox dates are (a few) days off
-    #   - not all dates in the log match the graph
     
     # create javascript arrays of dygraph data points and raw data, respectively
     data_rows_js = []
     raw_rows_js = []
     for dt, ct, url, browser, profile_id, last_params in raw:
-    #raw.append((last_search_dt, ct, url, browser, profile_id, params))
         row_js = "[%s]" % ", ".join([dt.strftime("new Date(%Y,%m-1,%d,%H,%M,%S)"), str(ct)])
         data_rows_js.append(row_js)
         jsons = [json.dumps(i) for i in [ct, url, browser, profile_id, last_params]]
@@ -80,30 +78,38 @@ def get_html(queries, raw, by_day):
     # create javascript dictionary for highlight data
     # dates will be strings, not dates (TODO see WARNING)
     by_str_day = {}
-    # by_day[day] = by_day.get(day, []) + [[dt, entry, browser, profile_id]]
     for day_dt, entries in by_day.iteritems():
-        str_day = day_dt.strftime("%Y-%m-%d") # WARNING: off-by-one from JS month!!
+        str_day = day_dt.strftime("%Y-%m-%d") 
         str_entries = []
         for entry in entries:
             dt = entry[0]
-            str_dt = dt.strftime("%Y-%m-%d %H:%M:%S") # WARNING: see above -- just use some common string format
+            str_dt = dt.strftime("%Y-%m-%d %H:%M:%S")
             str_entry = [str_dt] + entry[1:] 
             str_entries.append(str_entry)
 
         by_str_day[str_day] = str_entries
     by_day_js = json.dumps(by_str_day, indent=4)
 
-    zoom_end = sorted(by_day.keys())[-1]
+    zoom_end = sorted(by_day.keys())[-1] + timedelta(days=1)
     zoom_end_js = zoom_end.strftime("new Date(%Y,%m-1,%d)")
-    zoom_start = zoom_end - timedelta(days=7)
-    zoom_start_js = zoom_start.strftime("new Date(%Y,%m-1,%d)")
+    zoom_start_day = zoom_end - timedelta(days=1)
+    zoom_start_day_js = zoom_start_day.strftime("new Date(%Y,%m-1,%d)")
+    zoom_start_two_days = zoom_end - timedelta(days=2)
+    zoom_start_two_days_js = zoom_start_two_days.strftime("new Date(%Y,%m-1,%d)")
+    zoom_start_week = zoom_end - timedelta(days=7)
+    zoom_start_week_js = zoom_start_week.strftime("new Date(%Y,%m-1,%d)")
+    zoom_start_month = zoom_end - timedelta(days=31)
+    zoom_start_month_js = zoom_start_month.strftime("new Date(%Y,%m-1,%d)")
 
     # substitute into template
     template = open("res/dygraph_template.html", "rt").read()
     graph_html = template.replace("$JS_DATA_ARRAY", data_js) 
     graph_html = graph_html.replace("$JS_BY_DAY", by_day_js)
     graph_html = graph_html.replace("$JS_RAW_DATA", raw_js)
-    graph_html = graph_html.replace("$JS_ZOOM_MIN", zoom_start_js)
+    graph_html = graph_html.replace("$JS_ZOOM_WEEK_MIN", zoom_start_week_js)
+    graph_html = graph_html.replace("$JS_ZOOM_DAY_MIN", zoom_start_day_js)
+    graph_html = graph_html.replace("$JS_ZOOM_TWO_DAYS_MIN", zoom_start_two_days_js)
+    graph_html = graph_html.replace("$JS_ZOOM_MONTH_MIN", zoom_start_month_js)
     graph_html = graph_html.replace("$JS_ZOOM_MAX", zoom_end_js)
     return graph_html
 
@@ -126,21 +132,22 @@ if __name__ == "__main__":
     raw = []
     by_day = {}
     last_search_dt = None
+    last_params = None
     ct = 0
     for dt, url, browser, profile_id in history:
-        #hr = dt.replace(minute=0, second=0, microsecond=0)
         # if this is a search query, record it to data & raw tables
         params = get_query_params(url)
         if params:
             if last_search_dt:
                 queries.append((last_search_dt, ct))
-                raw.append((last_search_dt, ct, url, browser, profile_id, params))
+                raw.append((last_search_dt, ct, url, browser, profile_id, last_params))
 
                 # store query into to by_day dict
                 day = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-                by_day[day] = by_day.get(day, []) + [[dt, params, browser, profile_id]]
+                by_day[day] = by_day.get(day, []) + [[dt, last_params, browser, profile_id]]
 
             last_search_dt = dt
+            last_params = params
             ct = 0
 
             # print search query info to stdout
