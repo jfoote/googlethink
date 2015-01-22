@@ -1,8 +1,8 @@
 # googlethink
 
-googlethink generates a graph of Google queries from local Chrome and Firefox history. I currently use it to support time tracking as described [in "Why You Probably Don't Need Automatic Time Tracking"](https://foote.pub/TODO) 
+googlethink is an unpolished script that generates a graph of Google queries from local Chrome and Firefox history. I currently use it to support time tracking as described [in "Why You Probably Don't Need Automatic Time Tracking"](http://foote.pub/2015/01/22/automatic-time-tracking.html).
 
-![https://foote.pub/images/googlethink.png]
+![Screenshot](https://foote.pub/images/googlethink.png)
 
 ## Graph
 
@@ -19,6 +19,12 @@ $ git clone https://github.com/jfoote/googlethink && cd googlethink
 $ ./query.py
 $ open graph.html # or whatever 
 ```
+
+# Disclaimer
+
+The bad news: This is a script I developed for personal use a Mac. As such the default history locations are for OSX, and I haven't tested it on other platforms.
+
+The good news: The whole thing fits in a single file and it should be easy to edit if you know some basic Python.
 
 ## How it works
 
