@@ -2,7 +2,7 @@
 
 googlethink is an unpolished script that generates a graph of Google queries from local Chrome and Firefox history. I currently use it to support time tracking as described [in "Why You Probably Don't Need Automatic Time Tracking"](http://foote.pub/2015/01/22/automatic-time-tracking.html).
 
-![Screenshot](http://foote.pub/images/googlethink.png)
+![Graph Screenshot](http://foote.pub/images/googlethink.png)
 
 ## Graph
 
